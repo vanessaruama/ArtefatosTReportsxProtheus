@@ -1,0 +1,190 @@
+#include "protheus.ch"
+#include "msobject.ch"
+#include "totvs.framework.treports.integratedprovider.th"
+    
+namespace custom.produtos.fornecedores
+ 
+@totvsFrameworkTReportsIntegratedProvider(active=.T., team="SIGACOM", tables="SA5", name="Produto X Fornecedor", country="ALL", initialRelease="12.1.2210")
+//-------------------------------------------------------------------
+/*{Protheus.doc} ProdFornTReportsBusinessObject
+Classe para criação do Objeto de Negócio de Prod  x Forn para o TReports
+ 
+@author Vanessa Ruama
+@since 02/03/2023
+@version 1.0
+*/
+//-------------------------------------------------------------------  
+class ProdFornTReportsBusinessObject from totvs.framework.treports.integratedprovider.IntegratedProvider
+    public method new() as object
+    public method getData() as object
+    public method getSchema() as object
+ 
+    protected data aFields as array
+    protected data aStruct as array
+ 
+endclass
+ 
+//-------------------------------------------------------------------
+/*{Protheus.doc} new
+Método de instância da classe
+ 
+@return object: self
+ 
+@author Vanessa Ruama
+@since 02/03/2023
+@version 1.0
+*/
+//-------------------------------------------------------------------   
+method new() class ProdFornTReportsBusinessObject
+_Super:new()
+self:appendArea("Compras")
+self:setDisplayName("Fornecedores x Produtos")
+self:setDescription("Relatório Fornecedores x Produtos com tratamento LGPD")
+ 
+self:aFields := {"A5_FILIAL", "A5_FORNECE", "A5_LOJA", "A5_NOMEFOR", "A5_PRODUTO", "A5_NOMPROD", "A5_CODPRF"}
+self:aStruct := getStruct(self:aFields)
+ 
+return self
+ 
+//-------------------------------------------------------------------
+/*{Protheus.doc} getData
+Retorna os dados do objeto de negócio
+ 
+@param nPage, numérico, indica a página atual do relatório
+@param oFilter, objeto, contém o filtro do TReports
+ 
+@return object: self:oData
+ 
+@author Vanessa Ruama
+@since 02/03/2023
+@version 1.0
+*/
+//-------------------------------------------------------------------   
+method getData(nPage as numeric, oFilter as object) as object class ProdFornTReportsBusinessObject
+local cQuery as character
+local cAlias as character
+local nSkip as numeric
+local nCount as numeric
+local nX as numeric
+local jItems as json
+local aPDFields as array
+  
+nCount := 0
+cQuery := "SELECT A5_FILIAL,A5_PRODUTO,A5_NOMPROD,A5_FORNECE,A5_NOMEFOR,A5_LOJA,A5_CODPRF FROM " + RetSQLName("SA5") + " WHERE D_E_L_E_T_ = ' '"
+ 
+//Os filtros serão setados na interface do novo TReports
+if oFilter:hasFilter()
+    cQuery += " AND " + oFilter:getSQLExpression()
+endif
+  
+cAlias := MPSysOpenQuery(cQuery)
+  
+if nPage == 1
+    (cAlias)->(dbGoTop())
+else
+    //Encontra a quantidade de itens que irá pular de acordo com a página atual
+    nSkip := ((nPage - 1) * self:getPageSize())     
+  
+    (cAlias)->(dbSkip(nSkip))
+endif  
+  
+//Verifica se precisa fazer o tratamento para LGPD
+aPDFields := FwProtectedDataUtil():UsrAccessPDField(__cUserID, self:aFields)
+lObfuscated := len( aPDFields ) != Len(self:aFields)
+
+while !(cAlias)->(Eof())
+    jItems := JsonObject():new()
+ 
+    for nX := 1 To Len(self:aStruct)
+        if lObfuscated .and. aScan(aPDFields, self:aStruct[nX][5]) == 0
+            jItems[self:aStruct[nX][1]] := FwProtectedDataUtil():ValueAsteriskToAnonymize((cAlias)->&(self:aStruct[nX][5]))
+        else
+            jItems[self:aStruct[nX][1]] := (cAlias)->&(self:aStruct[nX][5])
+        endif
+    next nX
+ 
+    self:oData:appendData(jItems)
+ 
+    (cAlias)->(DBSkip())
+    nCount++
+  
+    //Sai do loop quando chegar no tamanho de itens da página
+    if nCount == self:getPageSize()
+      exit
+    endif
+enddo 
+  
+//Se não for o último registro indica que terá próxima página
+self:setHasNext(!(cAlias)->(Eof())) 
+  
+(cAlias)->(DBCloseArea())
+    
+return self:oData
+ 
+//-------------------------------------------------------------------
+/*{Protheus.doc} getSchema
+Retorna a estrutura dos campos
+ 
+@return object: self:oSchema
+ 
+@author Vanessa Ruama
+@since 02/03/2023
+@version 1.0
+*/
+//-------------------------------------------------------------------   
+method getSchema() as object class ProdFornTReportsBusinessObject
+Local nX as numeric
+ 
+for nX := 1 To Len(self:aStruct)
+    self:addProperty(self:aStruct[nX][1], self:aStruct[nX][2], self:aStruct[nX][3], self:aStruct[nX][4], self:aStruct[nX][5])
+Next nX
+  
+return self:oSchema
+ 
+//-------------------------------------------------------------------
+/*{Protheus.doc} getStruct
+Prepara a estrutura dos campos
+ 
+@param aFlds array: Array com os campos do relatório
+ 
+@return array: Array com a estrutura dos campos
+ 
+@author Vanessa Ruama
+@since 02/03/2023
+@version 1.0
+*/
+//------------------------------------------------------------------- 
+function getStruct(aFlds)
+Local aConvFld as array
+Local aFldTmp    as array
+Local cCampo     as character
+Local cFldQry    as character
+Local cTipR      as character
+Local nPos       as numeric
+Local nC         as numeric
+ 
+aConvFld := {{"C", "string"}, {"D", "date"}, {"N", "number"}, {"L", "boolean"}, {"M", "memo"}}
+aFldTmp    := {}
+ 
+for nC := 1 to Len(aFlds)
+    cFldQry := aFlds[nC]
+    nPos    := AT(".", aFlds[nC]) + 1
+     
+    if nPos > 0
+        cCampo := Substr(cFldQry, nPos)
+    else
+        cCampo := cFldQry
+    endif
+     
+    cTipo := GetSx3Cache(cCampo, "X3_TIPO")
+     
+    if (nPos := aScan(aConvFld, {|c| c[01] = cTipo})) > 0
+        cTipR := aConvFld[nPos, 02]
+    else
+        cTipR := "string"
+    endif
+ 
+    AAdd(aFldTmp, {cCampo, FWSX3Util():GetDescription(cCampo), cTipR, FwX3Titulo(Upper(cCampo)), cCampo})
+next nC
+ 
+return (aFldTmp)
