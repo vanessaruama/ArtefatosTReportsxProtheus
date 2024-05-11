@@ -68,13 +68,25 @@ local nCount as numeric
 local nX as numeric
 local jItems as json
 local aPDFields as array
+local lUseParams as logical
   
 nCount := 0
 cQuery := "SELECT A5_FILIAL,A5_PRODUTO,A5_NOMPROD,A5_FORNECE,A5_NOMEFOR,A5_LOJA,A5_CODPRF FROM " + RetSQLName("SA5") + " WHERE D_E_L_E_T_ = ' '"
- 
+lUseParams := .T.
+
 //Os filtros serão setados na interface do novo TReports
 if oFilter:hasFilter()
     cQuery += " AND " + oFilter:getSQLExpression()
+endif
+
+jParams := oFilter:getParameters() //metodo para retorno do json dos parâmetros
+
+if ValType(jParams["01"]) <> "A" .and. ValType(jParams["02"]) <> "A"
+    lUseParams := .F.
+endif
+
+if lUseParams .and. !empty(jParams["01"][1]) .and. !empty(jParams["02"][1])
+    cQuery += "AND A5_FORNECE BETWEEN " + jParams['01'][1] + " AND " +  jParams['02'][1]
 endif
   
 cAlias := MPSysOpenQuery(cQuery)
@@ -138,6 +150,13 @@ Local nX as numeric
 for nX := 1 To Len(self:aStruct)
     self:addProperty(self:aStruct[nX][1], self:aStruct[nX][2], self:aStruct[nX][3], self:aStruct[nX][4], self:aStruct[nX][5])
 Next nX
+
+self:addParameter("01"  , "Fornecedor de", "string", .F.)
+self:addParameter("02"  , "Fornecedor até", "string", .F.)
+
+//Consulta dos parâmetros
+self:setCustomURL("01", "api/framework/v1/genericLookupService/smartview/SA2", 2)
+self:setCustomURL("02", "api/framework/v1/genericLookupService/smartview/SA2", 2)
   
 return self:oSchema
  
