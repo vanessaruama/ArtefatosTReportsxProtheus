@@ -1,0 +1,5 @@
+# Estatística correta
+*.tlpp linguist-language=TLPP
+
+# Forçar detecção
+*.tlpp linguist-detectable=true
