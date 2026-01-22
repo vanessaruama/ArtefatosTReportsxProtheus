@@ -1,4 +1,4 @@
-# ArtefatosTReportsxProtheus
+# ArtefatosSmartViewxProtheus
 Artefatos utilizados no Artigo sobre a integração do Protheus com o Smart View
 
 # Links para os artigos
